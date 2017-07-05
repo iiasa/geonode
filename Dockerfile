@@ -2,6 +2,9 @@ FROM geonode/django
 MAINTAINER GeoNode development team
 
 COPY requirements.txt /usr/src/app/
+
+RUN pip install --upgrade pip
+
 RUN pip install -r requirements.txt
 
 EXPOSE 8000

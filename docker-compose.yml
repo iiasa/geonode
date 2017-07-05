@@ -42,7 +42,7 @@ services:
       - ./scripts/docker/env/production/geoserver.env
 
   geonode:
-    image: geonode/nginx:geoserver
+    build: nginx-docker/
     links:
       - django
       - geoserver
