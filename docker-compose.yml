@@ -16,7 +16,7 @@ services:
       - postgres
       - elasticsearch
       - rabbitmq
-    command: sh -c "django-admin.py runserver 0.0.0.0:8000 --settings=geonode.settings && python manage.py makemigrations --merge" 
+    command: django-admin.py runserver 0.0.0.0:8000 --settings=geonode.settings  
     env_file:
       - ./scripts/docker/env/production/django.env
 
