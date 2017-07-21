@@ -47,7 +47,7 @@ services:
       - django
       - geoserver
     ports:
-      - "80:80"
+      - "8011:80"
 
   data_dir_conf:
     image: geonode/geoserver_data:2.9.x-oauth2
