@@ -6,6 +6,60 @@
     :alt: Build Status
     :target: http://travis-ci.org/GeoNode/geonode
 
+Set up Docker containers 
+===============
+
+1. Clone the repository using::
+ 
+   # clone including submodules
+   git clone --recursive https://github.com/vwmaus/geonode.git
+
+   # OR 
+   git clone https://github.com/vwmaus/geonode.git
+   cd geonode 
+   git submodule update --init --recursive
+
+
+2. Replace `localhost` with the public location of your geonode in the files `./scripts/docker/env/production/django.env` and `./scripts/docker/env/production/geoserver.env`. 
+
+3. Build and run the Docker containers using::
+
+    # build the container
+    make build
+
+    # run the container
+    make up
+
+    # login to django container and run migration 
+    docker exec -it geonode_django_1 /bin/sh 
+
+    python manage.py makemigrations --merge 
+
+    # create database
+    make sync
+
+If you want to restart the system use::
+
+    # stop containers 
+    make stop 
+
+    # start containers 
+    make start 
+
+    # OR restart 
+    make restart 
+
+If the system goes down just run `make start`
+
+
+
+
+
+
+
+
+
+
 
 GeoNode Support 
 ===============
@@ -28,54 +82,6 @@ If instead, you are interested in doing development on the source code, here are
 
 Development Installations
 =========================
-
-Docker Usage
-------------
-
-If you want to use Docker you can now::
-
-    # build the docker container
-    docker-compose build
-
-    # run the docker container
-    docker-compose up
-
-    # turn it off
-    docker-compose down
-
-Or if you want to use the provided Makefile::
-
-    # build the container
-    make build
-
-    # run the container
-    make up
-
-    # create database
-    make sync
-
-    # pull latest images
-    make pull
-    
-**Note:**  
-For deveployment you need to add `geonode` alias into `/ect/hosts/` file as following:
-
-```
-$ sudo vim /etc/hosts
-##
-# Host Database
-#
-# localhost is used to configure the loopback interface
-# when the system is booting.  Do not change this entry.
-##
-127.0.0.1       localhost geonode
-255.255.255.255 broadcasthost
-::1             localhost
-```
-To access GeoNode just enter the following url: `http://geonode/` on your web browser. 
-For GeoServer: `http://geonode/geoserver/web/`
-
-
 
 Ubuntu
 ------
