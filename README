@@ -11,13 +11,13 @@ Set up Docker containers
 
 1. Clone the repository using::
  
-   # clone including submodules
-   git clone --recursive https://github.com/vwmaus/geonode.git
+    # clone including submodules
+    git clone --recursive https://github.com/vwmaus/geonode.git
 
-   # OR 
-   git clone https://github.com/vwmaus/geonode.git
-   cd geonode 
-   git submodule update --init --recursive
+    # OR 
+    git clone https://github.com/vwmaus/geonode.git
+    cd geonode 
+    git submodule update --init --recursive
 
 
 2. Replace `localhost` with the public location of your geonode in the files `./scripts/docker/env/production/django.env` and `./scripts/docker/env/production/geoserver.env`. 
