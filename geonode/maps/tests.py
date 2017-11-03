@@ -32,10 +32,12 @@ from agon_ratings.models import OverallRating
 from django.contrib.auth import get_user_model
 from django.conf import settings
 
+from geonode.decorators import on_ogc_backend
 from geonode.layers.models import Layer
 from geonode.maps.models import Map
 from geonode.maps.utils import fix_baselayers
-from geonode.utils import default_map_config
+from geonode import geoserver, qgis_server
+from geonode.utils import default_map_config, check_ogc_backend
 from geonode.base.populate_test_data import create_models
 from geonode.maps.tests_populate_maplayers import create_maplayers
 from geonode.tests.utils import NotificationsTestsHelper
@@ -57,7 +59,7 @@ VIEWER_CONFIG = """
     }
   },
   "map": {
-    "projection":"EPSG:900913",
+    "projection":"EPSG:3857",
     "units":"m",
     "maxResolution":156543.0339,
     "maxExtent":[-20037508.34,-20037508.34,20037508.34,20037508.34],
@@ -113,7 +115,7 @@ community."
         }
       },
       "map": {
-        "projection":"EPSG:900913",
+        "projection":"EPSG:3857",
         "units":"m",
         "maxResolution":156543.0339,
         "maxExtent":[-20037508.34,-20037508.34,20037508.34,20037508.34],
@@ -137,6 +139,7 @@ community."
                 "view_resourcebase"]},
         "groups": {}}
 
+    @on_ogc_backend(geoserver.BACKEND_PACKAGE)
     def test_map_json(self):
         # Test that saving a map when not logged in gives 401
         response = self.client.put(
@@ -204,6 +207,7 @@ community."
         self.assertEquals(response.status_code, 400)
         self.client.logout()
 
+    @on_ogc_backend(geoserver.BACKEND_PACKAGE)
     def test_map_fetch(self):
         """/maps/[id]/data -> Test fetching a map in JSON"""
         map_obj = Map.objects.get(id=1)
@@ -273,17 +277,42 @@ community."
         response = self.client.get(reverse('map_detail', args=(map_obj.id,)))
         self.assertEquals(response.status_code, 200)
 
+    def test_describe_map(self):
+        map_obj = Map.objects.get(id=1)
+        map_obj.set_default_permissions()
+        response = self.client.get(reverse('map_metadata_detail', args=(map_obj.id,)))
+        self.failUnlessEqual(response.status_code, 200)
+        self.assertContains(response, "Approved", count=1, status_code=200, msg_prefix='', html=False)
+        self.assertContains(response, "Published", count=1, status_code=200, msg_prefix='', html=False)
+        self.assertContains(response, "Featured", count=1, status_code=200, msg_prefix='', html=False)
+        self.assertContains(response, "<dt>Group</dt>", count=0, status_code=200, msg_prefix='', html=False)
+
+        # ... now assigning a Group to the map
+        group = Group.objects.first()
+        map_obj.group = group
+        map_obj.save()
+        response = self.client.get(reverse('map_metadata_detail', args=(map_obj.id,)))
+        self.failUnlessEqual(response.status_code, 200)
+        self.assertContains(response, "<dt>Group</dt>", count=1, status_code=200, msg_prefix='', html=False)
+        map_obj.group = None
+        map_obj.save()
+
     def test_new_map_without_layers(self):
         # TODO: Should this test have asserts in it?
         self.client.get(reverse('new_map'))
 
     def test_new_map_with_layer(self):
         layer = Layer.objects.all()[0]
-        self.client.get(reverse('new_map') + '?layer=' + layer.typename)
+        self.client.get(reverse('new_map') + '?layer=' + layer.alternate)
 
     def test_new_map_with_empty_bbox_layer(self):
         layer = Layer.objects.all()[0]
-        self.client.get(reverse('new_map') + '?layer=' + layer.typename)
+        self.client.get(reverse('new_map') + '?layer=' + layer.alternate)
+
+    def test_add_layer_to_existing_map(self):
+        layer = Layer.objects.all()[0]
+        map_obj = Map.objects.get(id=1)
+        self.client.get(reverse('add_layer') + '?layer_name=%s&map_id=%s' % (layer.alternate, map_obj.id))
 
     def test_ajax_map_permissions(self):
         """Verify that the ajax_layer_permissions view is behaving as expected
@@ -296,7 +325,7 @@ community."
         def url(id):
             return reverse('resource_permissions', args=[id])
 
-        # Test that an invalid layer.typename is handled for properly
+        # Test that an invalid layer.alternate is handled for properly
         response = self.client.post(
             url(invalid_mapid),
             data=json.dumps(self.perm_spec),
@@ -536,7 +565,7 @@ community."
         # Test successful new map creation
         m = Map()
         admin_user = get_user_model().objects.get(username='admin')
-        layer_name = Layer.objects.all()[0].typename
+        layer_name = Layer.objects.all()[0].alternate
         m.create_from_layer_list(admin_user, [layer_name], "title", "abstract")
         map_id = m.id
 
@@ -589,6 +618,20 @@ community."
             content_type="text/json")
         self.assertEquals(response.status_code, 200)
         map_id = int(json.loads(response.content)['id'])
+        # Check new map saved
+        map_obj = Map.objects.get(id=map_id)
+        # Check
+        # BBox format: [xmin, xmax, ymin, ymax
+        bbox_str = [
+            '-90.1932079140', '-79.2067920625',
+            '9.0592199045', '16.5407800920', 'EPSG:4326']
+
+        self.assertEqual(
+            bbox_str,
+            [str(c) for c in map_obj.bbox])
+        bbox_long_str = '-90.1932079140,9.0592199045,' \
+                        '-79.2067920625,16.5407800920'
+        self.assertEqual(bbox_long_str, map_obj.bbox_string)
 
         # Test methods other than GET or POST and no layer in params
         response = self.client.put(url)
@@ -630,8 +673,12 @@ community."
         map_id = 1
         map_obj = Map.objects.get(id=map_id)
 
-        # number of base layers (we remove the local geoserver entry from the total)
-        n_baselayers = len(settings.MAP_BASELAYERS) - 1
+        if check_ogc_backend(geoserver.BACKEND_PACKAGE):
+            # number of base layers (we remove the local geoserver entry from the total)
+            n_baselayers = len(settings.MAP_BASELAYERS) - 1
+        elif check_ogc_backend(qgis_server.BACKEND_PACKAGE):
+            # QGIS Server backend already excluded local geoserver entry
+            n_baselayers = len(settings.MAP_BASELAYERS)
 
         # number of local layers
         n_locallayers = map_obj.layer_set.filter(local=True).count()
@@ -701,7 +748,7 @@ community."
         for resource in resources:
             self.assertEquals(resource.date, date)
         # test language change
-        language = 'Non-existing'
+        language = 'eng'
         response = self.client.post(
             reverse(view, args=(ids,)),
             data={'language': language},
@@ -710,6 +757,17 @@ community."
         resources = Model.objects.filter(id__in=[r.pk for r in resources])
         for resource in resources:
             self.assertEquals(resource.language, language)
+        # test keywords change
+        keywords = 'some,thing,new'
+        response = self.client.post(
+            reverse(view, args=(ids,)),
+            data={'keywords': keywords},
+        )
+        self.assertEquals(response.status_code, 302)
+        resources = Model.objects.filter(id__in=[r.pk for r in resources])
+        for resource in resources:
+            for word in resource.keywords.all():
+                self.assertTrue(word.name in keywords.split(','))
 
 
 class MapModerationTestCase(TestCase):
@@ -773,7 +831,7 @@ class MapsNotificationsTestCase(NotificationsTestsHelper):
         self.setup_notifications_for(MapsAppConfig.NOTIFICATIONS, self.u)
 
     def testMapsNotifications(self):
-        with self.settings(NOTIFICATION_QUEUE_ALL=True):
+        with self.settings(PINAX_NOTIFICATIONS_QUEUE_ALL=True):
             self.clear_notifications_queue()
             self.client.login(username=self.user, password=self.passwd)
             new_map = reverse('new_map_json')

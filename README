@@ -2,6 +2,9 @@
     :alt: Coverage Badge
     :target: https://coveralls.io/github/GeoNode/geonode?branch=master
 
+.. image:: https://codecov.io/gh/GeoNode/geonode/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/GeoNode/geonode
+
 .. image:: https://secure.travis-ci.org/GeoNode/geonode.png
     :alt: Build Status
     :target: http://travis-ci.org/GeoNode/geonode

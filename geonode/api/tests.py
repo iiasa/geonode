@@ -18,14 +18,16 @@
 #
 #########################################################################
 
+from datetime import datetime, timedelta
 from django.core.urlresolvers import reverse
-from tastypie.test import ResourceTestCase
+from django.test import TestCase
+from tastypie.test import ResourceTestCaseMixin
 
 from geonode.base.populate_test_data import create_models, all_public
 from geonode.layers.models import Layer
 
 
-class PermissionsApiTests(ResourceTestCase):
+class PermissionsApiTests(ResourceTestCaseMixin, TestCase):
 
     fixtures = ['initial_data.json', 'bobby']
 
@@ -97,6 +99,21 @@ class PermissionsApiTests(ResourceTestCase):
         resp = self.api_client.get(self.list_url)
         self.assertEquals(len(self.deserialize(resp)['objects']), 8)
 
+        layer.is_published = False
+
+        # with resource publishing
+        with self.settings(RESOURCE_PUBLISHING=True):
+            resp = self.api_client.get(self.list_url)
+            self.assertEquals(len(self.deserialize(resp)['objects']), 8)
+
+            self.api_client.client.login(username='bobby', password='bob')
+            resp = self.api_client.get(self.list_url)
+            self.assertEquals(len(self.deserialize(resp)['objects']), 7)
+
+            self.api_client.client.login(username=self.user, password=self.passwd)
+            resp = self.api_client.get(self.list_url)
+            self.assertEquals(len(self.deserialize(resp)['objects']), 8)
+
     def test_layer_get_detail_unauth_layer_not_public(self):
         """
         Test that layer detail gives 401 when not public and not logged in
@@ -122,7 +139,7 @@ class PermissionsApiTests(ResourceTestCase):
         self.assertEquals(len(self.deserialize(resp)['objects']), 8)
 
 
-class SearchApiTests(ResourceTestCase):
+class SearchApiTests(ResourceTestCaseMixin, TestCase):
 
     """Test the search"""
 
@@ -208,20 +225,30 @@ class SearchApiTests(ResourceTestCase):
         """Test date filtering"""
 
         # check we get the correct layers number returnered filtering on the
-        # title
-        filter_url = self.list_url + '?date__exact=1985-01-01'
+        # dates
+        step = timedelta(days=60)
+        now = datetime.now()
+        fstring = '%Y-%m-%d'
+
+        def to_date(val):
+            return val.date().strftime(fstring)
+
+        d1 = to_date(now - step)
+        filter_url = self.list_url + '?date__exact={}'.format(d1)
 
         resp = self.api_client.get(filter_url)
         self.assertValidJSONResponse(resp)
-        self.assertEquals(len(self.deserialize(resp)['objects']), 1)
+        self.assertEquals(len(self.deserialize(resp)['objects']), 0)
 
-        filter_url = self.list_url + '?date__gte=1985-01-01'
+        d3 = to_date(now - (3 * step))
+        filter_url = self.list_url + '?date__gte={}'.format(d3)
 
         resp = self.api_client.get(filter_url)
         self.assertValidJSONResponse(resp)
         self.assertEquals(len(self.deserialize(resp)['objects']), 3)
 
-        filter_url = self.list_url + '?date__range=1950-01-01,1985-01-01'
+        d4 = to_date(now - (4 * step))
+        filter_url = self.list_url + '?date__range={},{}'.format(d4, to_date(now))
 
         resp = self.api_client.get(filter_url)
         self.assertValidJSONResponse(resp)
