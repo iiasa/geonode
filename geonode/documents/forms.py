@@ -21,10 +21,10 @@
 import json
 import os
 import re
-import autocomplete_light
+from autocomplete_light.registry import autodiscover
 
 from django import forms
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ugettext as _
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.forms import HiddenInput, TextInput
@@ -38,7 +38,7 @@ from geonode.documents.models import (
 from geonode.maps.models import Map
 from geonode.layers.models import Layer
 
-autocomplete_light.autodiscover() # flake8: noqa
+autodiscover() # flake8: noqa
 
 from geonode.base.forms import ResourceBaseForm
 
@@ -47,7 +47,7 @@ class DocumentFormMixin(object):
 
     def generate_link_choices(self, resources=None):
 
-        if not resources:
+        if resources is None:
             resources = list(Layer.objects.all())
             resources += list(Map.objects.all())
             resources.sort(key=lambda x: x.title)
@@ -67,7 +67,6 @@ class DocumentFormMixin(object):
         return [choice[0] for choice in choices]
 
     def save_many2many(self, links_field='links'):
-
         # create and fetch desired links
         instances = []
         for link in self.cleaned_data[links_field]:
@@ -112,7 +111,7 @@ class DocumentForm(ResourceBaseForm, DocumentFormMixin):
 
 class DocumentDescriptionForm(forms.Form):
     title = forms.CharField(300)
-    abstract = forms.CharField(1000, widget=forms.Textarea, required=False)
+    abstract = forms.CharField(2000, widget=forms.Textarea, required=False)
     keywords = forms.CharField(500, required=False)
 
 
